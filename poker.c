@@ -90,7 +90,6 @@ int cmp_rank(const void *a_, const void *b_) {
 	}
 	return 0;
 }
-void p_card(struct card c);
 
 struct rank check_flush(const struct card *h_, size_t n) {
 	/* Everything else we might check finds it more convenient to sort by card
@@ -299,6 +298,10 @@ struct rank rank_hand(const struct card *h, size_t n) {
 void p_card(struct card c) {
 	char num[20];
 	char *val;
+	if (!c.value) {
+		puts("wtf");
+		return;
+	}
 	switch (c.value) {
 	case JACK: val = "Jack"; break;
 	case QUEEN: val = "Queen"; break;
@@ -313,8 +316,10 @@ void p_card(struct card c) {
 }
 
 void p_rank(struct rank r) {
-	if (!rank_is_valid(r))
+	if (!rank_is_valid(r)) {
 		puts("<none>");
+		return;
+	}
 	printf("%s: ", rank_names[r.rank]);
 	for (unsigned i = 0; r.cards[i].suit && i < Countof(r.cards); i++) {
 		p_card(r.cards[i]);

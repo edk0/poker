@@ -51,7 +51,8 @@ void sort_hand(struct card *h, size_t n) {
 }
 
 enum cat {
-	STRAIGHT_FLUSH,
+	INVALID = -1,
+	STRAIGHT_FLUSH = 0,
 	FOUR_KIND,
 	FULL_HOUSE,
 	FLUSH,
@@ -65,18 +66,22 @@ enum cat {
 const char *rank_names[] = {"straight flush", "four of a kind", "full house", "flush", "straight", "three of a kind", "two pair", "pair", "high card"};
 
 struct rank {
-	int rank;
+	enum cat rank;
 	struct card cards[5];
 };
 
 const struct rank invalid = { .rank = -1 };
 
+int rank_is_valid(struct rank r) {
+	return r.rank != INVALID;
+}
+
 int cmp_rank(const void *a_, const void *b_) {
 	const struct rank *a = a_, *b = b_;
 	int t;
 	/* Invalid comes after everything */
-	if ((a->rank == -1) != (b->rank == -1))
-		return a->rank == -1 ? 1 : -1;
+	if (rank_is_valid(*a) != rank_is_valid(*b))
+		return rank_is_valid(*a) ? -1 : 1;
 	t = a->rank - b->rank;
 	if (t) return t;
 	for (unsigned i = 0; i < Countof(a->cards); i++) {
@@ -127,7 +132,110 @@ skip:
 }
 
 struct rank check_kind(const struct card *h, size_t n) {
-	/* "N of a kind", perhaps also pairs */
+	/* "N of a kind" */
+	const enum cat run_cats[] = { [2] = PAIR, [3] = THREE_KIND, [4] = FOUR_KIND };
+	struct card last;
+	struct rank top = invalid;
+	unsigned i = 0;
+	int run = 1;
+	int pos = -1;
+	int top_run;
+	goto skip;
+	do {
+		struct card card = h[i];
+		if (card.value == last.value) {
+			run++;
+			if (run >= Countof(run_cats))
+				abort();
+			struct rank rc = {run_cats[run], {card}};
+			if (cmp_rank(&rc, &top) < 0) {
+				top = rc;
+				pos = i;
+				top_run = run;
+			}
+		} else {
+			run = 1;
+		}
+skip:
+		last = h[i];
+	} while (++i < n);
+	if (rank_is_valid(top)) {
+		int cp = n - 1;
+		for (int i = 1; i < Countof(top.cards); i++) {
+			/* skip over the run we're using for the result */
+			if (cp == pos)
+				cp -= top_run;
+			if (cp < 0)
+				abort();
+			top.cards[i] = h[cp];
+			cp--;
+		}
+	}
+	return top;
+}
+
+struct rank check_dual(const struct card *h, size_t n) {
+	/* full house, two pair */
+	/* we'll maintain two positions, major and minor, where major is the better
+	 * one and the first to be filled */
+	struct card last;
+	int min = -1, min_run = 0;
+	int maj = -1, maj_run = 0;
+	unsigned i = 0;
+	int run = 1;
+	goto skip;
+	do {
+		struct card card = h[i];
+		if (card.value == last.value) {
+			run++;
+			/* we need to figure out where to be */
+			if (run >= 2) {
+				int major = 0;
+				if (maj == -1) major = 1;
+				if (h[maj].value == card.value) major = 1;
+				if (maj_run <= 2) major = 1;
+				if (run > 2) major = 1;
+
+				if (major) {
+					if (maj != -1 && h[maj].value != card.value) {
+						min = maj;
+						min_run = maj_run;
+					}
+					maj = i;
+					maj_run = run;
+				} else {
+					min = i;
+					min_run = i;
+				}
+			}
+		} else {
+			run = 1;
+		}
+skip:
+		last = h[i];
+	} while (++i < n);
+	if (maj_run >= 3 && min_run >= 2) {
+		return (struct rank){FULL_HOUSE, {h[maj], h[min]}};
+	} else if (maj_run >= 2 && min_run >= 2) {
+		int cp = n - 1;
+		struct rank r = (struct rank){TWO_PAIR, {h[maj], h[min]}};
+		while (cp) {
+			if (cp == maj) {
+				cp -= 2;
+				continue;
+			}
+			if (cp == min) {
+				cp -= 2;
+				continue;
+			}
+			break;
+		}
+		if (cp < 0)
+			return invalid;
+		r.cards[2] = h[cp];
+		return r;
+	}
+	return invalid;
 }
 
 struct rank check_straight(const struct card *h, size_t n) {
@@ -143,7 +251,7 @@ struct rank check_straight(const struct card *h, size_t n) {
 			if (run <= 4) {
 				straight[run] = card;
 			} else {
-				memmove(straight, straight + 1, sizeof *straight * 4);
+				memmove(straight, straight + 1, sizeof (struct card) * 4);
 				straight[4] = card;
 			}
 			run++;
@@ -169,7 +277,8 @@ struct {
 	struct rank (*check)(const struct card *h, size_t n);
 } checks[] = {
 	{ STRAIGHT_FLUSH, check_flush },
-	{ FOUR_KIND, 0 /*check_kind*/ },
+	{ FOUR_KIND, check_kind },
+	{ FULL_HOUSE, check_dual },
 	{ STRAIGHT, check_straight },
 };
 
@@ -181,7 +290,7 @@ struct rank rank_hand(const struct card *h, size_t n) {
 		struct rank r = checks[i].check(h, n);
 		if (i == 0 || cmp_rank(&r, &rank) < 0)
 			rank = r;
-		if (i + 1 < Countof(checks) && rank.rank != -1 && rank.rank < checks[i + 1].best_rank)
+		if (i + 1 < Countof(checks) && rank_is_valid(rank) && rank.rank < checks[i + 1].best_rank)
 			break;
 	}
 	return rank;
@@ -204,9 +313,8 @@ void p_card(struct card c) {
 }
 
 void p_rank(struct rank r) {
-	if (r.rank == -1) {
+	if (!rank_is_valid(r))
 		puts("<none>");
-	}
 	printf("%s: ", rank_names[r.rank]);
 	for (unsigned i = 0; r.cards[i].suit && i < Countof(r.cards); i++) {
 		p_card(r.cards[i]);
@@ -216,18 +324,19 @@ void p_rank(struct rank r) {
 int main(void) {
 	struct rank r;
 	struct card test_hand[] = {
-		{ SPADES, ACE },
+//		{ SPADES, ACE },
 		{ SPADES, QUEEN },
 		{ HEARTS, JACK },
 		{ CLUBS, JACK },
-		{ SPADES, 10 },
+		{ SPADES, JACK },
+//		{ DIAMONDS, JACK },
+//		{ SPADES, 10 },
 		{ SPADES, 9 },
+		{ CLUBS, 9 },
+		{ DIAMONDS, 9 },
 		{ HEARTS, KING },
 	};
 	sort_hand(test_hand, Countof(test_hand));
-	for (int i = 0; i < Countof(test_hand); i++) {
-		p_card(test_hand[i]);
-	}
 	r = rank_hand(test_hand, Countof(test_hand));
 	p_rank(r);
 	return 0;

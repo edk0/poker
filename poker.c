@@ -31,7 +31,7 @@ int cmp_card(const void *a_, const void *b_) {
 	int t;
 	t = a->value - b->value;
 	if (t) return t;
-	t = a->suit - b->suit;
+	t = b->suit - a->suit;
 	if (t) return t;
 	return 0;
 }
@@ -39,7 +39,7 @@ int cmp_card(const void *a_, const void *b_) {
 int cmp_card_by_suit(const void *a_, const void *b_) {
 	const struct card *a = a_, *b = b_;
 	int t;
-	t = a->suit - b->suit;
+	t = b->suit - a->suit;
 	if (t) return t;
 	t = a->value - b->value;
 	if (t) return t;
@@ -107,14 +107,14 @@ struct rank check_flush(const struct card *h_, size_t n) {
 			run++;
 			if (run >= 5) {
 				struct rank rc = {FLUSH, {card, h[i - 1], h[i - 2], h[i - 3], h[i - 4]}};
-				if (h[i - 4].value == card.value - 4 || h[i - 4].value == 2 && h[i - 1].value == 5 && card.value == ACE) {
+				if (h[i - 4].value == card.value - 4 || (h[i - 4].value == 2 && h[i - 1].value == 5 && card.value == ACE)) {
 					struct card high = card;
 					if (h[i - 4].value == 2) {
 						high = h[i - 1];
 					}
 					rc = (struct rank){STRAIGHT_FLUSH, {high}};
 				}
-				if (cmp_rank(&rc, &top) < 0)
+				if (cmp_rank(&rc, &top) <= 0)
 					top = rc;
 			}
 		} else {
@@ -127,7 +127,7 @@ skip:
 }
 
 struct rank check_kind(const struct card *h, size_t n) {
-	/* this is the hard one so i have left it out */
+	/* "N of a kind", perhaps also pairs */
 }
 
 struct rank check_straight(const struct card *h, size_t n) {
@@ -153,7 +153,7 @@ struct rank check_straight(const struct card *h, size_t n) {
 					top = rc;
 			}
 		} else if (card.value == last.value ) {
-			/* ignore */
+			straight[run - 1] = card;
 		} else {
 			run = 1;
 			straight[0] = card;

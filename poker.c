@@ -12,6 +12,13 @@ enum suit {
 	DIAMONDS,
 };
 
+const char *suit_names[] = {
+	[SPADES] = "Spades",
+	[HEARTS] = "Hearts",
+	[CLUBS] = "Clubs",
+	[DIAMONDS] = "Diamonds",
+};
+
 enum {
 	JACK = 11,
 	QUEEN,
@@ -19,7 +26,38 @@ enum {
 	ACE,
 };
 
-const char *suit_names[] = { [SPADES] = "Spades", [HEARTS] = "Hearts", [CLUBS] = "Clubs", [DIAMONDS] = "Diamonds" };
+const char *val_names[] = {
+	0, 0, "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine", "Ten",
+	"Jack",
+	"Queen",
+	"King",
+	"Ace",
+};
+
+enum cat {
+	INVALID = -1,
+	STRAIGHT_FLUSH = 0,
+	FOUR_KIND,
+	FULL_HOUSE,
+	FLUSH,
+	STRAIGHT,
+	THREE_KIND,
+	TWO_PAIR,
+	PAIR,
+	HIGH_CARD,
+};
+
+const char *rank_names[] = {
+	[STRAIGHT_FLUSH] = "straight flush",
+	[FOUR_KIND] = "four of a kind",
+	[FULL_HOUSE] = "full house",
+	[FLUSH] = "flush",
+	[STRAIGHT] = "straight",
+	[THREE_KIND] = "three of a kind",
+	[TWO_PAIR] = "two pair",
+	[PAIR] = "pair",
+	[HIGH_CARD] = "high card",
+};
 
 struct card {
 	enum suit suit;
@@ -49,21 +87,6 @@ int cmp_card_by_suit(const void *a_, const void *b_) {
 void sort_hand(struct card *h, size_t n) {
 	qsort(h, n, sizeof *h, cmp_card);
 }
-
-enum cat {
-	INVALID = -1,
-	STRAIGHT_FLUSH = 0,
-	FOUR_KIND,
-	FULL_HOUSE,
-	FLUSH,
-	STRAIGHT,
-	THREE_KIND,
-	TWO_PAIR,
-	PAIR,
-	HIGH_CARD,
-};
-
-const char *rank_names[] = {"straight flush", "four of a kind", "full house", "flush", "straight", "three of a kind", "two pair", "pair", "high card"};
 
 struct rank {
 	enum cat rank;
@@ -187,7 +210,6 @@ struct rank check_dual(const struct card *h, size_t n) {
 		struct card card = h[i];
 		if (card.value == last.value) {
 			run++;
-			/* we need to figure out where to be */
 			if (run >= 2) {
 				int major = 0;
 				if (maj == -1) major = 1;
@@ -295,24 +317,20 @@ struct rank rank_hand(const struct card *h, size_t n) {
 	return rank;
 }
 
+const char *card_name(struct card c) {
+	static char buf[64];
+	const char *val = c.value >= 2 && c.value < Countof(val_names)
+		? val_names[c.value]
+		: "<invalid>";
+	const char *suit = c.suit > 0 && c.suit < Countof(suit_names)
+		? suit_names[c.suit]
+		: "<invalid>";
+	snprintf(buf, sizeof buf, "%s of %s", val, suit);
+	return buf;
+}
+
 void p_card(struct card c) {
-	char num[20];
-	char *val;
-	if (!c.value) {
-		puts("wtf");
-		return;
-	}
-	switch (c.value) {
-	case JACK: val = "Jack"; break;
-	case QUEEN: val = "Queen"; break;
-	case KING: val = "King"; break;
-	case ACE: val = "Ace"; break;
-	default:
-		sprintf(num, "%d", c.value);
-		val = num;
-		break;
-	}
-	printf("%s of %s\n", val, suit_names[c.suit]);
+	puts(card_name(c));
 }
 
 void p_rank(struct rank r) {
@@ -320,10 +338,11 @@ void p_rank(struct rank r) {
 		puts("<none>");
 		return;
 	}
-	printf("%s: ", rank_names[r.rank]);
+	printf("%s: [", rank_names[r.rank]);
 	for (unsigned i = 0; r.cards[i].suit && i < Countof(r.cards); i++) {
-		p_card(r.cards[i]);
+		printf("%s%s", i ? ", " : "", card_name(r.cards[i]));
 	}
+	printf("]\n");
 }
 
 int main(void) {
